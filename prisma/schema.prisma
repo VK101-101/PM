@@ -1,0 +1,311 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model with security features
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          Role      @default(MEMBER)
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret   String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  
+  accounts      Account[]
+  sessions      Session[]
+  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
+  workspaceMembers WorkspaceMember[]
+  assignedTasks Task[] @relation("TaskAssignee")
+  createdTasks  Task[] @relation("TaskCreator")
+  comments      Comment[]
+  activities    Activity[]
+  
+  @@index([email])
+  @@map("users")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  GUEST
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// Workspace/Organization
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  image       String?
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  owner       User     @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members     WorkspaceMember[]
+  projects    Project[]
+  activities  Activity[]
+  
+  @@index([slug])
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String      @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime    @default(now())
+  
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  GUEST
+}
+
+// Project
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  key         String   // Short project key like PROJ
+  description String?
+  color       String   @default("#6366f1")
+  workspaceId String
+  leadId      String?
+  status      ProjectStatus @default(ACTIVE)
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lists       List[]
+  tasks       Task[]
+  activities  Activity[]
+  
+  @@unique([workspaceId, key])
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+// List/Column for Kanban
+model List {
+  id        String   @id @default(cuid())
+  name      String
+  projectId String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  
+  @@map("lists")
+}
+
+// Task
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  projectId   String
+  listId      String
+  assigneeId  String?
+  creatorId   String
+  position    Int        @default(0)
+  priority    Priority   @default(NONE)
+  status      TaskStatus @default(TODO)
+  dueDate     DateTime?
+  startDate   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deletedAt   DateTime?
+  
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  list        List       @relation(fields: [listId], references: [id], onDelete: Cascade)
+  assignee    User?      @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator     User       @relation("TaskCreator", fields: [creatorId], references: [id])
+  comments    Comment[]
+  labels      TaskLabel[]
+  attachments Attachment[]
+  
+  @@index([projectId, listId])
+  @@index([assigneeId])
+  @@map("tasks")
+}
+
+enum Priority {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  CANCELLED
+}
+
+// Labels
+model Label {
+  id        String      @id @default(cuid())
+  name      String
+  color     String      @default("#6b7280")
+  projectId String?
+  createdAt DateTime    @default(now())
+  
+  tasks     TaskLabel[]
+  
+  @@map("labels")
+}
+
+model TaskLabel {
+  taskId  String
+  labelId String
+  
+  task    Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label   Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  
+  @@id([taskId, labelId])
+  @@map("task_labels")
+}
+
+// Comments
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  taskId    String
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id])
+  
+  @@map("comments")
+}
+
+// Attachments
+model Attachment {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  size      Int
+  mimeType  String
+  taskId    String
+  uploadedBy String
+  createdAt DateTime @default(now())
+  
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  @@map("attachments")
+}
+
+// Activity/Audit Log
+model Activity {
+  id          String   @id @default(cuid())
+  type        ActivityType
+  action      String
+  entityType  String   // task, project, workspace
+  entityId    String
+  metadata    String?  // JSON
+  userId      String?
+  workspaceId String?
+  projectId   String?
+  createdAt   DateTime @default(now())
+  
+  user        User?      @relation(fields: [userId], references: [id])
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id])
+  project     Project?   @relation(fields: [projectId], references: [id])
+  
+  @@index([workspaceId, createdAt])
+  @@map("activities")
+}
+
+enum ActivityType {
+  CREATED
+  UPDATED
+  DELETED
+  MOVED
+  ASSIGNED
+  COMMENTED
+  COMPLETED
+}
