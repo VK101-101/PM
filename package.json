@@ -10,9 +10,10 @@
     "postinstall": "PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^7.10.1",
+    "@prisma/client": "^6.8.2",
     "lucide-react": "^1.63.0",
     "next": "16.4.3",
+    "prisma": "^6.8.2",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
@@ -23,7 +24,6 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
-    "prisma": "^6.17.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
